@@ -1,0 +1,8 @@
+[project]
+name = "void-agents"
+version = "0.1.0"
+description = "Run, record and model open AI coding agents on HPC clusters"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=2.3,<3",
+]

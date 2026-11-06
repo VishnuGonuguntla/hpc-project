@@ -221,8 +221,9 @@ __marimo__/
 
 # Local docs, reports and notes (not shared)
 *.pdf
-*.md
-!README.md
+reports/
+notes/
+*.local.md
 CLAUDE.md
 .claude/
 

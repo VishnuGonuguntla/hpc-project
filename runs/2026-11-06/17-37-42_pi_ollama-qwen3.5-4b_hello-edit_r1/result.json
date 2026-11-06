@@ -1,0 +1,4 @@
+{
+  "passed": true,
+  "output": "hello.txt = 'Hello from the sandbox.\\nstatus: done\\n'\n"
+}

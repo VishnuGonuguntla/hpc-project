@@ -1,0 +1,88 @@
+{
+  "run": "runs/2026-11-06/17-37-42_pi_ollama-qwen3.5-4b_hello-edit_r1",
+  "mode": "new",
+  "continues": null,
+  "sandbox": {
+    "name": "2026-11-06_17-37-42_pi",
+    "path": "~/.void/sandboxes/2026-11-06_17-37-42_pi",
+    "created": true
+  },
+  "inputs": {
+    "harness": "pi",
+    "model": {
+      "name": "ollama-qwen3.5-4b",
+      "model": "qwen3.5:4b",
+      "upstream": "http://127.0.0.1:11434",
+      "server": "ollama",
+      "context": 32768,
+      "reasoning": true
+    },
+    "cluster": {
+      "name": "local",
+      "server": "mcp_server/server.py",
+      "sandbox_root": "~/.void/sandboxes"
+    },
+    "task": {
+      "name": "hello-edit",
+      "prompt": "In the sandbox, the file hello.txt contains a line \"status: todo\". Change that line to\n\"status: done\" and leave the rest of the file unchanged. Then read the file again and confirm."
+    }
+  },
+  "void_command": [
+    "./run.py",
+    "pi",
+    "--task",
+    "hello-edit",
+    "--timeout",
+    "400"
+  ],
+  "harness": {
+    "name": "pi",
+    "version": "1.4.0",
+    "command": [
+      "pi",
+      "--provider",
+      "void",
+      "--model",
+      "qwen3.5:4b",
+      "--tools",
+      "mcp__cluster__*",
+      "--no-context-files",
+      "--append-system-prompt",
+      "/Users/vinay/vinay/fau/ws26_27/hpc_project/runs/2026-11-06/17-37-42_pi_ollama-qwen3.5-4b_hello-edit_r1/config/instructions.md",
+      "--session-dir",
+      "/Users/vinay/vinay/fau/ws26_27/hpc_project/runs/2026-11-06/17-37-42_pi_ollama-qwen3.5-4b_hello-edit_r1/session",
+      "--mode",
+      "json",
+      "In the sandbox, the file hello.txt contains a line \"status: todo\". Change that line to\n\"status: done\" and leave the rest of the file unchanged. Then read the file again and confirm."
+    ],
+    "env": {
+      "PI_CODING_AGENT_DIR": "/Users/vinay/vinay/fau/ws26_27/hpc_project/runs/2026-11-06/17-37-42_pi_ollama-qwen3.5-4b_hello-edit_r1/config/pi"
+    },
+    "cwd": "/Users/vinay/.void/work/2026-11-06_17-37-42_pi"
+  },
+  "model_info_start": {
+    "server_version": "0.40.13",
+    "digest": "7f3251fa6878a78a606bcb3c074283306e5ad2ea411a7774a9dd98a4bc7f2d13",
+    "context_length": null
+  },
+  "warnings": [
+    "model server runs qwen3.5:4b with context 4096, profile expects 32768: long prompts are silently cut (Ollama: OLLAMA_CONTEXT_LENGTH)"
+  ],
+  "git": {
+    "commit": "8e7d338687c6e88fa0befd4775e12aecca874efc",
+    "dirty": true
+  },
+  "host": {
+    "hostname": "Vinays-MacBook-Pro.local",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "python": "3.14.0"
+  },
+  "t_start": 1793983062.4190981,
+  "exit_code": 0,
+  "t_end": 1793983104.190461,
+  "model_info_end": {
+    "server_version": "0.40.13",
+    "digest": "7f3251fa6878a78a606bcb3c074283306e5ad2ea411a7774a9dd98a4bc7f2d13",
+    "context_length": 4096
+  }
+}

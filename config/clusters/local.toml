@@ -1,0 +1,3 @@
+# The MCP server runs on this machine: everything works without a cluster.
+server = "mcp_server/server.py"      # relative to the repo
+sandbox_root = "~/.void/sandboxes"

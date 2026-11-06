@@ -1,0 +1,6 @@
+# Qwen3.5 4B served by a local Ollama
+model = "qwen3.5:4b"                 # id sent to the server
+upstream = "http://127.0.0.1:11434"  # OpenAI- and Anthropic-compatible
+server = "ollama"                    # lets void read digest and context length
+context = 32768                      # context the harnesses need; void warns if the server runs less
+reasoning = true

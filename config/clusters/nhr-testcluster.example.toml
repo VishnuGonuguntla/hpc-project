@@ -1,0 +1,5 @@
+# Copy to nhr-testcluster.local.toml (gitignored) and fill in your values; deploy with ./deploy.sh <ssh>.
+ssh = "my-ssh-alias"                          # host alias from ~/.ssh/config
+python = "$WORK/agent-mcp-venv/bin/python"    # expanded on the cluster, as printed by deploy.sh
+server = "~/agent-mcp/server.py"
+sandbox_root = "~/agent-sandbox"              # no spaces: used unquoted in remote shell commands

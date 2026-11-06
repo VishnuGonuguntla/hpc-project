@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "cluster": {
+      "command": "/Users/vinay/vinay/fau/ws26_27/hpc_project/.venv/bin/python3",
+      "args": [
+        "/Users/vinay/vinay/fau/ws26_27/hpc_project/record/mcp_tap.py",
+        "--log",
+        "/Users/vinay/vinay/fau/ws26_27/hpc_project/runs/2026-11-06/17-37-42_pi_ollama-qwen3.5-4b_hello-edit_r1/mcp.jsonl",
+        "--",
+        "/Users/vinay/vinay/fau/ws26_27/hpc_project/.venv/bin/python3",
+        "/Users/vinay/vinay/fau/ws26_27/hpc_project/mcp_server/server.py",
+        "--sandbox",
+        "/Users/vinay/.void/sandboxes/2026-11-06_17-37-42_pi"
+      ],
+      "exposure": "direct",
+      "timeout": 120
+    }
+  }
+}

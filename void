@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Start an agent harness with recording. ./void --help
+exec uv run --project "$(dirname "$0")" python "$(dirname "$0")/run.py" "$@"

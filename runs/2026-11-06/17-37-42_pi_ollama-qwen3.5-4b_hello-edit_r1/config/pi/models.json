@@ -1,0 +1,16 @@
+{
+  "providers": {
+    "void": {
+      "api": "openai-completions",
+      "baseUrl": "http://127.0.0.1:55079/v1",
+      "apiKey": "void",
+      "models": [
+        {
+          "id": "qwen3.5:4b",
+          "contextWindow": 32768,
+          "reasoning": true
+        }
+      ]
+    }
+  }
+}

@@ -229,3 +229,14 @@ CLAUDE.md
 
 # macOS
 .DS_Store
+
+# void: personal profiles (SSH host, paths)
+config/**/*.local.toml
+node_modules/
+node_modules
+
+# void runs stay local; one example run is committed
+runs/*
+!runs/2026-11-06/
+runs/2026-11-06/*
+!runs/2026-11-06/17-37-42_pi_ollama-qwen3.5-4b_hello-edit_r1/

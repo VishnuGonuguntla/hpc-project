@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Run, record and model open AI coding agents on HPC clusters"
 requires-python = ">=3.12"
 dependencies = [
+    "httpx2>=2.16",
     "mcp>=2.3,<3",
+    "starlette>=1.10",
+    "uvicorn>=0.54",
 ]
 
 [dependency-groups]

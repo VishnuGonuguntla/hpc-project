@@ -760,7 +760,10 @@ name = "void-agents"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "httpx2" },
     { name = "mcp" },
+    { name = "starlette" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -769,7 +772,12 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mcp", specifier = ">=2.3,<3" }]
+requires-dist = [
+    { name = "httpx2", specifier = ">=2.16" },
+    { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "starlette", specifier = ">=1.10" },
+    { name = "uvicorn", specifier = ">=0.54" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.2.0" }]

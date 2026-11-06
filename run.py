@@ -246,6 +246,9 @@ def one_run(inputs: dict, *, sandbox: str | None = None, parent: Path | None = N
     sandbox = check_name(sandbox or now.strftime(f"%Y-%m-%d_%H-%M-%S_{harness}"))
     is_new = prepare_sandbox(cluster, sandbox, task and task["name"])
     mode = "continue" if parent else ("new" if is_new else "reuse-sandbox")
+    where = f"{cluster['ssh']}:" if cluster.get("ssh") else ""
+    print(f"void: sandbox  {where}{sandbox_path(cluster, sandbox)}  ({mode})\nvoid: run      {rel(run)}",
+          file=sys.stderr)
 
     info = model_info(model)
     manifest = {

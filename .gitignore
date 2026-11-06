@@ -218,3 +218,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local docs, reports and notes (not shared)
+*.pdf
+*.md
+!README.md
+CLAUDE.md
+.claude/
+
+# macOS
+.DS_Store

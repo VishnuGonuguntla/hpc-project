@@ -3,6 +3,7 @@
   ./void pi                                new session in a new sandbox (interactive)
   ./void pi --continue [RUN]               continue a session (default: latest run of this harness)
   ./void pi --sandbox NAME                 new session in a named sandbox (created if missing)
+  ./void pi --dir PATH                     new session working directly in a folder you choose
   ./void pi --task hello-edit [--reps 3]   headless runs, each checked by the task
   ./void pi --prompt "TEXT" [--continue]   one headless message, no check
   ./void --from runs/<date>/<run>          repeat a recorded task run with the same inputs
@@ -30,6 +31,9 @@ RUNS = REPO / "runs"
 WORK = Path.home() / ".void" / "work"  # harness working folders, one per sandbox
 SSH = ["ssh", "-T", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR"]
 SAFE_NAME = re.compile(r"[A-Za-z0-9._-]+")  # names end up in remote shell commands
+SAFE_DIR = re.compile(r"(~|\$WORK|\$HOME)?[A-Za-z0-9._/-]*")  # so do --dir paths, unquoted
+SNAPSHOT_SKIP = [".git", ".venv", "node_modules", "__pycache__"]
+SNAPSHOT_LIMIT = 100 * 1024 * 1024  # bytes
 
 
 # ---------- profiles and tasks ----------
@@ -65,6 +69,30 @@ def check_name(name: str) -> str:
     return name
 
 
+def check_dir(cluster: dict, path: str) -> str:
+    """A folder the agent may work in: not /, not home or above, not this repo (it could rewrite its
+    own recordings). Local paths are resolved; cluster paths are checked by their shape."""
+    if not path or not SAFE_DIR.fullmatch(path) or ".." in path.split("/"):
+        raise SystemExit(f"invalid --dir '{path}': use letters, digits, '.', '_', '-', '/', "
+                         "and optionally a leading ~, $WORK or $HOME")
+    if cluster.get("ssh"):
+        # shortcut: remote paths cannot be resolved here, so require a subfolder of ~, $HOME or
+        # $WORK, or an absolute path at least 3 levels deep; check on the cluster if this is too strict
+        root, _, rest = path.partition("/")
+        deep = root in ("~", "$HOME", "$WORK") and rest.strip("/") or (
+            path.startswith("/") and len(path.strip("/").split("/")) >= 3)
+        if not deep:
+            raise SystemExit(f"--dir '{path}' is too broad: use a project folder below ~ or $WORK")
+        return path.rstrip("/")
+    p = Path(path).expanduser().resolve()
+    home = Path.home().resolve()
+    if home.is_relative_to(p) or p.is_relative_to(REPO) or REPO.is_relative_to(p):
+        raise SystemExit(f"--dir '{p}' is not allowed: it is or contains your home folder or this repo")
+    if not SAFE_DIR.fullmatch(str(p)):
+        raise SystemExit(f"--dir '{p}' contains characters void cannot pass safely (e.g. spaces)")
+    return str(p)
+
+
 def cluster_cmd(cluster: dict, script: str) -> list[str]:
     """A shell command run on the cluster over SSH, or here for a cluster profile without ssh."""
     return [*SSH, cluster["ssh"], script] if cluster.get("ssh") else ["sh", "-c", script]
@@ -74,16 +102,14 @@ def sandbox_path(cluster: dict, name: str) -> str:
     return f"{cluster['sandbox_root']}/{name}"  # unquoted on purpose: the shell expands ~ and $WORK
 
 
-def server_command(cluster: dict, sandbox: str) -> list[str]:
-    path = sandbox_path(cluster, sandbox)
+def server_command(cluster: dict, path: str) -> list[str]:
     if cluster.get("ssh"):
         return [*SSH, cluster["ssh"], cluster["python"], cluster["server"], "--sandbox", path]
     return [sys.executable, str(REPO / cluster["server"]), "--sandbox", str(Path(path).expanduser())]
 
 
-def prepare_sandbox(cluster: dict, name: str, task: str | None) -> bool:
+def prepare_sandbox(cluster: dict, path: str, task: str | None) -> bool:
     """Create the sandbox unless it exists; a new one gets the task's start files. Returns True if new."""
-    path = sandbox_path(cluster, name)
     if subprocess.run(cluster_cmd(cluster, f"test -d {path}")).returncode == 0:
         return False
     files = REPO / "tasks" / task / "files" if task else None
@@ -97,14 +123,27 @@ def prepare_sandbox(cluster: dict, name: str, task: str | None) -> bool:
     return True
 
 
-def snapshot_sandbox(cluster: dict, name: str, dest: Path) -> None:
-    # shortcut: copies the whole sandbox every run; switch to rsync or a size limit for big sandboxes
-    dest.mkdir(parents=True, exist_ok=True)
-    pack = subprocess.Popen(cluster_cmd(cluster, f"tar -C {sandbox_path(cluster, name)} -cf - ."),
+def snapshot_sandbox(cluster: dict, path: str, dest: Path) -> None:
+    """Copy the sandbox into the run folder, without SNAPSHOT_SKIP folders; give up above the limit."""
+    excludes = " ".join(f"--exclude={d}" for d in SNAPSHOT_SKIP)
+    pack = subprocess.Popen(cluster_cmd(cluster, f"tar -C {path} {excludes} -cf - ."),
                             stdout=subprocess.PIPE)
-    subprocess.run(["tar", "-C", str(dest), "-xf", "-"], stdin=pack.stdout, check=True)
-    if pack.wait():
-        raise RuntimeError("could not read the sandbox")
+    dest.mkdir(parents=True, exist_ok=True)
+    unpack = subprocess.Popen(["tar", "-C", str(dest), "-xf", "-"], stdin=subprocess.PIPE)
+    total = 0
+    for chunk in iter(lambda: pack.stdout.read(1 << 20), b""):
+        total += len(chunk)
+        if total > SNAPSHOT_LIMIT:
+            pack.kill()
+            unpack.kill()
+            pack.wait()
+            unpack.wait()
+            shutil.rmtree(dest)
+            raise RuntimeError(f"sandbox is larger than {SNAPSHOT_LIMIT >> 20} MB, snapshot skipped")
+        unpack.stdin.write(chunk)
+    unpack.stdin.close()
+    if pack.wait() or unpack.wait():
+        raise RuntimeError("could not copy the sandbox")
 
 
 # ---------- recording helpers ----------
@@ -231,30 +270,35 @@ def run_harness(cmd, env, cwd, run: Path, headless: bool, timeout: float) -> int
             return "timeout"
 
 
-def one_run(inputs: dict, *, sandbox: str | None = None, parent: Path | None = None,
-            rep: int | None = None, timeout: float = 1800) -> Path:
+def one_run(inputs: dict, *, sandbox: str | None = None, folder: str | None = None,
+            parent: Path | None = None, rep: int | None = None, timeout: float = 1800) -> Path:
+    """sandbox: a name below the cluster's sandbox_root; folder: any checked path (--dir)."""
     harness, model, cluster, task = (inputs[k] for k in ("harness", "model", "cluster", "task"))
     prompt = task["prompt"] if task else inputs.get("prompt")  # None: interactive
     now = datetime.now()
     run = new_run_dir(now, harness, model["name"], task and task["name"], rep)
 
     if parent:
-        sandbox = json.loads((parent / "manifest.json").read_text())["sandbox"]["name"]
+        box = json.loads((parent / "manifest.json").read_text())["sandbox"]
+        sandbox, path = box["name"], box["path"]
         shutil.copytree(parent / "session", run / "session")
     else:
         (run / "session").mkdir()
-    sandbox = check_name(sandbox or now.strftime(f"%Y-%m-%d_%H-%M-%S_{harness}"))
-    is_new = prepare_sandbox(cluster, sandbox, task and task["name"])
+        if folder:
+            sandbox, path = None, folder
+        else:
+            sandbox = check_name(sandbox or now.strftime(f"%Y-%m-%d_%H-%M-%S_{harness}"))
+            path = sandbox_path(cluster, sandbox)
+    is_new = prepare_sandbox(cluster, path, task and task["name"])
     mode = "continue" if parent else ("new" if is_new else "reuse-sandbox")
     where = f"{cluster['ssh']}:" if cluster.get("ssh") else ""
-    print(f"void: sandbox  {where}{sandbox_path(cluster, sandbox)}  ({mode})\nvoid: run      {rel(run)}",
-          file=sys.stderr)
+    print(f"void: sandbox  {where}{path}  ({mode})\nvoid: run      {rel(run)}", file=sys.stderr)
 
     info = model_info(model)
     manifest = {
         "run": rel(run), "mode": mode,
         "continues": rel(parent) if parent else None,
-        "sandbox": {"name": sandbox, "path": sandbox_path(cluster, sandbox), "created": is_new},
+        "sandbox": {"name": sandbox, "path": path, "created": is_new},
         "inputs": inputs, "void_command": sys.argv,
         "harness": {"name": harness, "version": version(harness)},  # harness name = its command
         "model_info_start": info, "warnings": [],
@@ -271,12 +315,12 @@ def one_run(inputs: dict, *, sandbox: str | None = None, parent: Path | None = N
     instructions = run / "config" / "instructions.md"
     instructions.parent.mkdir(exist_ok=True)
     instructions.write_text(instructions_text())
-    workdir = WORK / sandbox
+    workdir = WORK / (sandbox or "dir" + re.sub(r"[^A-Za-z0-9._-]", "_", path))
     workdir.mkdir(parents=True, exist_ok=True)
 
     proxy, proxy_url = start_proxy(model, run / "llm.jsonl")
     tap = [sys.executable, str(REPO / "record" / "mcp_tap.py"), "--log", str(run / "mcp.jsonl"), "--",
-           *server_command(cluster, sandbox)]
+           *server_command(cluster, path)]
     launch = HARNESSES[harness](Setup(run=run, model=model, proxy_url=proxy_url, mcp=tap,
                                       instructions=instructions, prompt=prompt,
                                       resume=parent is not None))
@@ -293,7 +337,7 @@ def one_run(inputs: dict, *, sandbox: str | None = None, parent: Path | None = N
         proxy.wait()
         manifest["t_end"] = time.time()
         try:
-            snapshot_sandbox(cluster, sandbox, run / "sandbox")
+            snapshot_sandbox(cluster, path, run / "sandbox")
         except (RuntimeError, subprocess.CalledProcessError) as e:
             manifest["warnings"].append(f"sandbox snapshot failed: {e}")
         manifest["model_info_end"] = info = model_info(model)
@@ -308,9 +352,10 @@ def one_run(inputs: dict, *, sandbox: str | None = None, parent: Path | None = N
         write_manifest(run, manifest)
 
     print(f"\nvoid: run      {rel(run)}  (exit {manifest['exit_code']})"
-          f"\nvoid: sandbox  {sandbox} ({mode})"
+          f"\nvoid: sandbox  {where}{path}  ({mode})"
           f"\nvoid: continue ./void {harness} --continue {rel(run)}"
-          f"\nvoid: reuse    ./void {harness} --sandbox {sandbox}", file=sys.stderr)
+          f"\nvoid: reuse    ./void {harness} " + (f"--sandbox {sandbox}" if sandbox else f"--dir '{path}'"),
+          file=sys.stderr)
     return run
 
 
@@ -327,6 +372,7 @@ def main(argv=None) -> None:
     p.add_argument("--prompt", help="send one message headless instead of opening the harness")
     p.add_argument("--reps", type=int, default=1, help="repetitions of --task or --prompt")
     p.add_argument("--sandbox", help="sandbox name (reused if it exists)")
+    p.add_argument("--dir", help="work directly in this folder (on the cluster for remote profiles)")
     p.add_argument("--continue", dest="cont", nargs="?", const="latest", metavar="RUN",
                    help="continue a session (default: latest run of this harness)")
     p.add_argument("--from", dest="from_run", metavar="RUN", help="repeat a recorded task run")
@@ -344,8 +390,8 @@ def main(argv=None) -> None:
     if not a.harness:
         p.error("name a harness: " + ", ".join(sorted(HARNESSES)))
     if a.cont:
-        if a.task or a.sandbox:
-            p.error("--continue uses the earlier run's sandbox and inputs; drop --task/--sandbox")
+        if a.task or a.sandbox or a.dir:
+            p.error("--continue uses the earlier run's sandbox and inputs; drop --task/--sandbox/--dir")
         parent = latest_run(a.harness) if a.cont == "latest" else find_run(a.cont)
         inputs = json.loads((parent / "manifest.json").read_text())["inputs"]
         inputs |= {"task": None, "prompt": a.prompt}  # a continuation is interactive or one message
@@ -356,14 +402,17 @@ def main(argv=None) -> None:
 
     if a.task and a.prompt:
         p.error("use --task or --prompt, not both")
+    if a.sandbox and a.dir:
+        p.error("use --sandbox or --dir, not both")
     inputs = {"harness": a.harness, "model": load_profile("models", a.model),
               "cluster": load_profile("clusters", a.cluster),
               "task": load_task(a.task) if a.task else None, "prompt": a.prompt}
+    folder = check_dir(inputs["cluster"], a.dir) if a.dir else None
     if a.task or a.prompt:
         for rep in range(1, a.reps + 1):
-            one_run(inputs, sandbox=a.sandbox, rep=rep, timeout=a.timeout)
+            one_run(inputs, sandbox=a.sandbox, folder=folder, rep=rep, timeout=a.timeout)
     else:
-        one_run(inputs, sandbox=a.sandbox)
+        one_run(inputs, sandbox=a.sandbox, folder=folder)
 
 
 if __name__ == "__main__":

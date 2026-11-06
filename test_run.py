@@ -91,7 +91,7 @@ def test_unsafe_sandbox_names_are_refused(name):
 
 def test_ssh_cluster_command_runs_remotely():
     cluster = {"ssh": "host", "python": "$WORK/v/bin/python", "server": "~/s.py", "sandbox_root": "~/sb"}
-    cmd = void.server_command(cluster, "x")
+    cmd = void.server_command(cluster, "~/sb/x")
     assert cmd[0] == "ssh" and cmd[cmd.index("host") + 1:] == ["$WORK/v/bin/python", "~/s.py",
                                                                "--sandbox", "~/sb/x"]
     assert void.cluster_cmd(cluster, "test -d ~/sb/x")[-2:] == ["host", "test -d ~/sb/x"]
@@ -102,3 +102,50 @@ def test_context_warning():
     assert "4096" in void.context_warning(model, {"context_length": 4096})
     assert void.context_warning(model, {"context_length": 32768}) is None
     assert void.context_warning(model, {}) is None  # model not loaded: unknown, no warning
+
+
+# ---------- --dir ----------
+
+def test_dir_works_in_place_and_snapshot_skips_git(env, tmp_path):
+    project = tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    (project / ".git" / "HEAD").write_text("ref")
+    (project / "hello.txt").write_text("Hello from the sandbox.\nstatus: todo\n")
+    folder = void.check_dir(env["cluster"], str(project))
+
+    run = void.one_run(env, folder=folder, rep=1)
+    cont = void.one_run(env | {"task": None}, parent=run)
+
+    assert (project / "hello.txt").read_text().endswith("status: done\n")   # edited in place
+    assert manifest(run)["sandbox"] == {"name": None, "path": str(project.resolve()), "created": False}
+    assert manifest(cont)["sandbox"]["path"] == str(project.resolve())      # continue keeps it
+    assert (run / "sandbox" / "hello.txt").exists() and not (run / "sandbox" / ".git").exists()
+
+
+def test_snapshot_limit_skips_big_sandboxes(env, tmp_path, monkeypatch):
+    monkeypatch.setattr(void, "SNAPSHOT_LIMIT", 1000)
+    big = tmp_path / "big"
+    big.mkdir()
+    (big / "data.bin").write_bytes(b"x" * 5000)
+    with pytest.raises(RuntimeError, match="snapshot skipped"):
+        void.snapshot_sandbox(env["cluster"], str(big), tmp_path / "snap")
+    assert not (tmp_path / "snap").exists()
+
+
+@pytest.mark.parametrize("path", ["/", "~", "~/..", void.REPO.parent, void.REPO, void.REPO / "runs",
+                                  "a b", "x;rm -rf ~", ""])
+def test_dangerous_local_dirs_are_refused(path):
+    with pytest.raises(SystemExit):
+        void.check_dir({"name": "local"}, str(path))
+
+
+@pytest.mark.parametrize("path,ok", [("~/proj", True), ("$WORK/stencil", True), ("/home/hpc/x/proj", True),
+                                     ("~", False), ("~/", False), ("$WORK", False), ("/home", False),
+                                     ("~/a/../..", False), ("$(whoami)", False)])
+def test_remote_dirs_must_be_project_folders(path, ok):
+    cluster = {"ssh": "host"}
+    if ok:
+        assert void.check_dir(cluster, path) == path
+    else:
+        with pytest.raises(SystemExit):
+            void.check_dir(cluster, path)

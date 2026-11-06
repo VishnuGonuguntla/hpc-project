@@ -35,6 +35,7 @@ runs the MCP server on your machine.
 ./void pi                                   # new session in a new sandbox (normal Pi interface)
 ./void pi --continue [RUN]                  # continue a session (default: your latest Pi run)
 ./void pi --sandbox NAME                    # new session in a named sandbox (created if missing)
+./void pi --dir ~/projects/stencil          # new session working directly in a folder you choose
 ./void pi --task hello-edit --reps 3        # headless runs, each checked by the task
 ./void pi --prompt "TEXT" [--continue]      # one headless message
 ./void --from runs/<date>/<run>             # repeat a headless run with the same inputs
@@ -84,6 +85,11 @@ runs/<YYYY-MM-DD>/<HH-MM-SS>_<harness>_<model>_<task>_r<rep>/
 
 Sessions and sandboxes are separate: `--continue` keeps both, `--sandbox NAME` keeps the files but
 starts a new conversation. Earlier run folders are never changed.
+
+`--dir PATH` lets the agent work directly in an existing folder (on the cluster for remote profiles).
+The agent can change files there, so use git or a copy. Refused: `/`, your home folder or anything
+containing it, and this repo (the agent could rewrite its own recordings). Snapshots skip `.git`,
+`.venv`, `node_modules` and `__pycache__`, and are skipped with a warning above 100 MB.
 
 The files are the source of truth and can be queried directly, e.g. with DuckDB:
 `select * from read_json('runs/*/*/llm.jsonl')`. `runs/` is gitignored and stays local; one example

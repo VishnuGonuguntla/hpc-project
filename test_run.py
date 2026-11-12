@@ -92,8 +92,9 @@ def test_unsafe_sandbox_names_are_refused(name):
 def test_ssh_cluster_command_runs_remotely():
     cluster = {"ssh": "host", "python": "$WORK/v/bin/python", "server": "~/s.py", "sandbox_root": "~/sb"}
     cmd = void.server_command(cluster, "~/sb/x")
-    assert cmd[0] == "ssh" and cmd[cmd.index("host") + 1:] == ["$WORK/v/bin/python", "~/s.py",
-                                                               "--sandbox", "~/sb/x"]
+    # no argument may start with ~: harnesses expand it on this machine
+    assert cmd[0] == "ssh" and cmd[cmd.index("host") + 1:] == ["$WORK/v/bin/python", "$HOME/s.py",
+                                                               "--sandbox", "$HOME/sb/x"]
     assert void.cluster_cmd(cluster, "test -d ~/sb/x")[-2:] == ["host", "test -d ~/sb/x"]
 
 

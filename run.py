@@ -104,7 +104,9 @@ def sandbox_path(cluster: dict, name: str) -> str:
 
 def server_command(cluster: dict, path: str) -> list[str]:
     if cluster.get("ssh"):
-        return [*SSH, cluster["ssh"], cluster["python"], cluster["server"], "--sandbox", path]
+        # Pi's MCP adapter expands a leading ~ locally; $HOME reaches the remote shell untouched
+        args = [cluster["python"], cluster["server"], "--sandbox", path]
+        return [*SSH, cluster["ssh"], *("$HOME" + a[1:] if a.startswith("~/") else a for a in args)]
     return [sys.executable, str(REPO / cluster["server"]), "--sandbox", str(Path(path).expanduser())]
 
 

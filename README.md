@@ -53,8 +53,7 @@ to `<name>.local.toml` (gitignored), fill in your values and pass `--cluster <na
 
 | Path | Contents |
 |---|---|
-| `TODO.md` | Status, next steps, open decisions, known shortcuts |
-| `reports/` | Daily reports (gitignored, local only) |
+| `reports/` | Daily reports (gitignored, local only); `TODO.md` is local too |
 | `AGENTS.md` | Rules for any agent and any MCP server, loaded into every session |
 | `skills/hpc-cluster/` | Cluster knowledge (Slurm job scripts, file systems, proxy), loaded on demand |
 | `mcp_server/` | Our MCP server: sandboxed `list_dir`, `read_file`, `write_file`, `edit_file`; tests (`uv run pytest`) |

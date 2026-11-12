@@ -225,6 +225,7 @@ reports/
 notes/
 *.local.md
 CLAUDE.md
+TODO.md
 .claude/
 
 # macOS
